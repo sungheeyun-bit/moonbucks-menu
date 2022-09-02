@@ -1,110 +1,188 @@
-// ## 🎯 step1 요구사항 - 돔 조작과 이벤트 핸들링으로 메뉴 관리하기
-// step1 요구사항 구현을 위한 전략
-// TODO 메뉴 추가
-// - [ ] 메뉴의 이름을 입력 받고 확인 버튼 누르면 메뉴가 추가된다.
-// - [ ] 메뉴의 이름을 입력 받고 엔터키 입력으로 추가한다.
-// - 추가되는 메뉴의 아래 마크업은 `<ul id="espresso-menu-list" class="mt-3 pl-0"></ul>` 안에 삽입해야 한다.
-// - [ ] 총 메뉴 갯수를 count하여 상단에 보여준다.
-// - [ ] 메뉴가 추가되고 나면, input은 빈 값으로 초기화한다.
-// - [ ] 사용자 입력값이 빈 값이라면 추가되지 않는다.
+// ## 🎯 step3 요구사항 - 서버와의 통신을 통해 메뉴 관리하기
 
-// TODO 메뉴 수정
-// - [ ] 메뉴의 수정 버튼 클릭 이벤트를 받고, 메뉴 수정하는 모달창이 뜬다. (브라우저에서 제공하는 `prompt` 인터페이스 사용!)
-// - [ ] 모달창에서 신규메뉴명을 입력 받고, 확인버튼을 누르면 메뉴가 수정된다.
+// TODO 서버 요청 부분
+// - [ ] 웹 서버를 띄운다.
+// - [ ] 서버에 새로운 메뉴가 추가될 수 있도록 요청한다.
+// - [ ] 서버에 카테고리별 메뉴리스트를 불러온다.
+// - [ ] 서버에 메뉴가 수정 될 수 있도록 요청한다.
+// - [ ] 서버에 메뉴의 품절상태가 토글될 수 있도록 요청한다.
+// - [ ] 서버에 메뉴가 삭제 될 수 있도록 요청한다.
 
-// TODO 메뉴 삭제
-// - [ ] 메뉴 삭제 버튼 클릭 이벤트를 받고, 메뉴 삭제 컨펌 모달창이 뜬다.
-// - [ ] 확인 버튼을 클릭하면 메뉴가 삭제된다.
-// - [ ] 총 메뉴 객수를 count하여 상단에 보여준다.
+// TODO 리팩토링
+// - [ ] localStorage에 저장하는 로직은 지운다.
+// - [ ] fetch 비동기 api를 사용하는 부분을 async await을 사용하여 구현한다.
 
-// 자바스크립트 파일을 브라우저에서 불러왔을 때 실행을 되는 것을 만들어야 한다.
-// 그래서 App이라는 함수를 만들고
-// 이 함수안에 이벤트에 관련된 부분이나 기능들을 구현.
+// TODO 사용자 경험
+// - [ ] API 통신이 실패하는 경우에 대해 사용자가 알 수 있게 [alert](https://developer.mozilla.org/ko/docs/Web/API/Window/alert)으로 예외처리를 진행한다.
+// - [ ] 중복되는 메뉴는 추가할 수 없다.
 
-// 유틸함수
-// $ 표시는 자바스크립트의 DOM, html의 element를 가져올 때 $표시를 관용적으로 많이 사용한다.
-const $ = (selector) => document.querySelector(selector);
+import { $ } from "./utils/dom.js";
+import store from "./store/index.js";
+import MenuApi from "./api/index.js";
 
 function App() {
-  const updateMenuCount = () => {
-    const menuCount = $("#espresso-menu-list").querySelectorAll("li").length;
-    $(".menu-count").innerText = `총 ${menuCount} 개`;
+  // 카테고리별로 메뉴 관리
+  this.menu = {
+    espresso: [],
+    frappuccino: [],
+    blended: [],
+    teavana: [],
+    desert: [],
   };
-  // 코드가 중복되기 때문에 재사용할 수 있는 함수로 만들기
-  const addMeunName = () => {
-    // Enter 키를 입력했을 때 menu-name이 아무 값이 없으면 return
-    if ($("#espresso-menu-name").value === "") {
-      alert("값을 입력해주세요.");
-      // 뒷부분이 실행 안되게 하기 위해 return 해준다.
-      return;
-    }
-    const espressMenuName = $("#espresso-menu-name").value;
-    const menuItemTemplate = (espressMenuName) => {
-      return `
-          <li class="menu-list-item d-flex items-center py-2">
-            <span class="w-100 pl-2 menu-name">${espressMenuName}</span>
+  // 현재 카테고리에 대한 정보
+  // 페이지 접근시 최소 데이터는 에스프레소 메뉴를 그려줘야 하기 때문에
+  // espresso로 초기화
+  this.currentCategory = "espresso";
+
+  // App이라는 함수가 하나의 객체로 인스턴스로 생성될 때
+  // localStorage에 있는 데이터들을 불러온다.
+  this.init = async () => {
+    this.menu[this.currentCategory] = await MenuApi.getAllMenuByCategory(
+      this.currentCategory
+    );
+    render();
+    initEventListeners();
+  };
+
+  const render = async () => {
+    this.menu[this.currentCategory] = await MenuApi.getAllMenuByCategory(
+      this.currentCategory
+    );
+    const template = this.menu[this.currentCategory]
+      .map((item) => {
+        return `
+        <li data-menu-id="${
+          item.id
+        }" class="menu-list-item d-flex items-center py-2">
+          <span class="w-100 pl-2 menu-name ${
+            item.isSoldOut ? "sold-out" : ""
+          }">${item.name}</span>
+            <button
+                type="button"
+                class="bg-gray-50 text-gray-500 text-sm mr-1 menu-sold-out-button"
+              >
+              품절
+            </button>
             <button
               type="button"
               class="bg-gray-50 text-gray-500 text-sm mr-1 menu-edit-button"
             >
-            수정
+              수정
             </button>
             <button
               type="button"
               class="bg-gray-50 text-gray-500 text-sm menu-remove-button"
             >
-            삭제
+              삭제
             </button>
-          </li>`;
-    };
-    $("#espresso-menu-list").insertAdjacentHTML(
-      "beforeend",
-      menuItemTemplate(espressMenuName)
-    );
+        </li>`;
+      })
+      .join("");
+
+    $("#menu-list").innerHTML = template;
     updateMenuCount();
-    $("#espresso-menu-name").value = "";
   };
 
-  // 수정을 해주는 부분도 함수로 만들기.
-  const updateMenuName = (e) => {
-    // 내가 속해있는 가장 가까운 li태그로 찾아서 올라가야 하기 때문에
-    // 이럴때 closest메소드를 사용한다.
-    // text값을 가져오는 innerText를 사용하여 수정하고 싶은 메뉴 이름을 가져온다.
-    const $menuName = e.target.closest("li").querySelector(".menu-name");
-    const updatedMenuName = prompt("메뉴명을 수정하세요", $menuName.innerText);
-    $menuName.innerText = updatedMenuName;
+  const updateMenuCount = () => {
+    // 상태로 메뉴 갯수 관리
+    const menuCount = this.menu[this.currentCategory].length;
+    $(".menu-count").innerText = `총 ${menuCount} 개`;
   };
 
-  const removeMenuName = (e) => {
-    if (confirm("정말 삭제하겠습니까?")) {
-      // li태그 통으로 삭제해야한다.
-      e.target.closest("li").remove();
-      updateMenuCount();
-    }
-  };
-  $("#espresso-menu-list").addEventListener("click", (e) => {
-    if (e.target.classList.contains("menu-edit-button")) {
-      updateMenuName(e);
-    }
-
-    if (e.target.classList.contains("menu-remove-button")) {
-      removeMenuName(e);
-    }
-  });
-
-  $("#espresso-menu-form").addEventListener("submit", (e) => {
-    e.preventDefault();
-  });
-
-  $("#espresso-menu-submit-button").addEventListener("click", addMeunName);
-
-  $("#espresso-menu-name").addEventListener("keypress", (e) => {
-    // Enter 키가 아니면 무조건 반환
-    if (e.key !== "Enter") {
+  const addMenuName = async () => {
+    if ($("#menu-name").value === "") {
+      alert("메뉴를 입력해주세요.");
       return;
     }
-    addMeunName();
-  });
+
+    const duplicatedItem = this.menu[this.currentCategory].find(
+      (menuItem) => menuItem.name === $("#menu-name").value
+    );
+    if (duplicatedItem) {
+      alert("이미 등록된 메뉴입니다. 다시 입력해주세요.");
+      $("#menu-name").value = "";
+    }
+
+    const menuName = $("#menu-name").value;
+    await MenuApi.createMenu(this.currentCategory, menuName);
+    render();
+    $("#menu-name").value = "";
+  };
+
+  const updateMenuName = async (e) => {
+    // data 속성은 dataset속성으로 접근할 수 있다.
+    const menuId = e.target.closest("li").dataset.menuId;
+    const $menuName = e.target.closest("li").querySelector(".menu-name");
+    const updatedMenuName = prompt("메뉴명을 수정하세요.", $menuName.innerText);
+    await MenuApi.updateMenu(this.currentCategory, updatedMenuName, menuId);
+    render();
+  };
+
+  const removeMenuName = async (e) => {
+    if (confirm("정말 삭제하겠습니까?")) {
+      const menuId = e.target.closest("li").dataset.menuId;
+      await MenuApi.deleteMenu(this.currentCategory, menuId);
+      render();
+    }
+  };
+
+  const soldOutMenu = async (e) => {
+    const menuId = e.target.closest("li").dataset.menuId;
+    await MenuApi.toggleSoldOutMenu(this.currentCategory, menuId);
+    // 화면에 솔드아웃된 상태를 보여주기
+    render();
+  };
+
+  const changeCategory = (e) => {
+    const isCategoryButton = e.target.classList.contains("cafe-category-name");
+    if (isCategoryButton) {
+      // 기본적으로 html속성에 대문자를 사용할 수 없다. 그래서 보통 '-'를 이용해서 긴 단어의 속성을 작성한다.
+      // 이걸 dataset이라는 객체를 통해 가져올때 camelCase로 변환이 된다.
+      const categoryName = e.target.dataset.categoryName;
+      this.currentCategory = categoryName;
+      $("#category-title").innerText = `${e.target.innerText} 메뉴 관리`;
+      render();
+    }
+  };
+
+  // 이 함수 안에 eventListener를 계속 추가하면 된다.
+  const initEventListeners = () => {
+    $("#menu-list").addEventListener("click", (e) => {
+      if (e.target.classList.contains("menu-edit-button")) {
+        updateMenuName(e);
+        // 뒷부분은 체크할 필요가 없으니 return 해준다.
+        // 불필요한 밑에 연산들이 실행할 필요가 없어지니까.
+        return;
+      }
+      if (e.target.classList.contains("menu-remove-button")) {
+        removeMenuName(e);
+        return;
+      }
+      if (e.target.classList.contains("menu-sold-out-button")) {
+        soldOutMenu(e);
+        return;
+      }
+    });
+
+    $("#menu-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+    });
+
+    $("#menu-submit-button").addEventListener("click", addMenuName);
+    $("#menu-name").addEventListener("keypress", (e) => {
+      if (e.key !== "Enter") {
+        return;
+      }
+      addMenuName();
+    });
+    // 각각의 button에 eventListener를 붙이는 것은 비효율적이다.
+    // 각각의 button 태그들의 상위태그인 nav에 이벤트를 달아 놓으면 효율적으로 관리할 수 있다.
+    $("nav").addEventListener("click", changeCategory);
+  };
 }
 
-App();
+// new키워드를 사용하여 생성자 함수를 호출하 게 되면 이때의 this는 "만들어진 객체"를 참조한다.
+// 맨 처음 페이지에 접근했을 때 App이라는 객체가 생성이 되고,
+const app = new App();
+// 객체의 init 메소드를 실행!
+app.init();
